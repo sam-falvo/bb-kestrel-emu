@@ -1,0 +1,154 @@
+<html>
+ <head>
+  <title>
+   K2: Kestrel 2 Emulator
+  </title>
+  <link href="/css/core.css" rel="stylesheet" type="text/css" />
+ </head>
+ <body>
+  <a href="/navigation">Navigate This Site...</a>
+  <div id="Content">
+   <h1>
+    K2: The Kestrel 2 Emulator
+   </h1>
+   <h2>
+    What is the Kestrel 2 Emulator?
+   </h2>
+   <p>
+    After designing the Kestrel 1 computer, I realized that building a
+    more ambitious project would require resources that will be very
+    costly.  Therefore, it is imperative that I "get things right" before
+    I plunk down my hard-earned cash.  The cheapest way to build a
+    computer is to <i>not</i> build a computer, but rather an emulator
+    for it.
+   </p>
+   <p>
+    <b>k2</b> is an emulator for the Kestrel 2.  Its mission is not to be
+    a general purpose emulator in the sense that <a
+    href="http://www.viceteam.org">VICE</a> is; there is no
+    <i>precise</i> 1:1 mapping with any hardware yet, for the hardware
+    simply doesn't exist yet.  Instead, k2 is a <i>research vehicle</i>,
+    intended to let me get a feel for the real hardware as I (or others)
+    conceive it.  If there are things I (or you) don't like, I'm (you
+    are) free to alter the emulator accordingly.
+   </p>
+   <p>
+    Once real hardware exists, then k2 may be retrofitted to better match
+    the real-world hardware, at which point the feature set of the
+    computer it emulates will be set in stone.  Until then,
+    <i>explore!</i>
+   </p>
+   <h2>
+    Design Documents
+   </h2>
+   <ul>
+    <li>
+     <a href="designs/serbus-protocol">SerBus Protocol</a> -- the serial
+     expansion bus protocol.
+    </li>
+   </ul>
+   <h2>
+    Screenshots
+   </h2>
+   <table>
+    <tr>
+     <th>Date</th>
+     <th>Image</th>
+    </tr>
+    <tr>
+     <td>2007 May 20</td>
+     <td><a href="images/fullsize/screenshot-2007may20a.png"><img src="images/thumbnails/screenshot-2007may20a.png"></a></td>
+    </tr>
+    <tr>
+     <td>2007 May 20</td>
+     <td><a href="images/fullsize/screenshot-2007may20b.png"><img src="images/thumbnails/screenshot-2007may20b.png"></a></td>
+    </tr>
+   </table>
+   <h2>
+    Getting the Software
+   </h2>
+   <p>
+    At the time of this writing, due to the fact that work is still in
+    progress, there is no distinct download for a single package.  You'll
+    need to use <a href="http://www.darcs.net">darcs</a> to grab a copy
+    of the repository.
+   </p>
+   <div id="Example">
+    <pre>darcs get http://www.falvotech.com/content/kestrel/2/emulator/repo</pre>
+   </div>
+   <p>
+    The emulator <i>does not</i> come with any ROM image files.  You'll
+    probably want to visit the <a href="../firmware">Firmware</a> page to
+    grab a copy of my latest firmware build.
+   </p>
+   <h2>
+    Building the Software
+   </h2>
+   <p>
+    To build the software, you must first build the <a
+    href="/content/lib65816">lib65816</a> software.  lib65816 is the
+    microprocessor emulator used by k2.  Once that is built and
+    installed, you should then be able to utilize <a
+    href="http://www.scons.org">SCons</a> to build and install k2.
+   </p>
+   <h2>
+    Using the Software
+   </h2>
+   <p>
+    You must have a 32KiB file in your current directory called
+    <b>ROMFILE</b> (case is sensitive for Unix-type OSes).  This file is
+    mapped to $008000-$00FFFF in the 65816's address space; hence,
+    software contained in the ROMFILE can be considered the Kestrel's
+    BIOS, bootstrap, or if it fits, the operating system.
+   </p>
+   <p>
+    Once this file exists, you can launch the emulator with <b>k2</b>.
+    As I write this page, it takes no arguments (it's pretty dumb in that
+    respect, but remember it's a code and hardware exploration tool, not
+    an end-user product!).
+   </p>
+   <h2>
+    Contributions Welcome
+   </h2>
+   <p>
+    As usual, if you want to contribute back, please feel free to use
+    darcs to grab a local branch of the software, and make your changes
+    there.  When you're happy with your changes, please use this command:
+   </p>
+   <div id="Example">
+    <pre>darcs send http://www.falvotech.com/content/kestrel/2/emulator/</pre>
+   </div>
+   <p>
+    to send me the patches.
+   </p>
+   <p>
+    Not all patches will be accepted.  If you're attempting to turn k2
+    into something that doesn't agree with my current vision for the
+    project, I reserve the right to deny your patch.  But that's OK --
+    you have a local copy, and I'd be happy to link to it for those who
+    would be interested in what you've created from it.
+   </p>
+   <p>
+    I also reserve the right to <i>modify patches</i> that you send, so
+    as to conform to my <a href="/content/publications/project-guidelines/conventions">common
+    code conventions</a>.  lib65816 is based on legacy software, so its
+    programming conventions are not consistent.  However, the remainder
+    of the code in k2 ought to conform for consistency sake.
+   </p>
+   <div id="Note">
+    <b>NOTE</b>.  This does not mean I'm going to clean up after you on
+    every patch.  :-)  If that starts to happen, I will deny patches on
+    the grounds that they do not conform to the coding standards.  It all
+    depends on how much time I have to invest in patch maintenance at the
+    time; remember that I have a full-time job too!
+   </div>
+   <h2>
+    TODO
+   </h2>
+   <ul>
+    <li>Create better user documentation</li>
+    <li>Turn the software into a <a href="http://www.literateprogramming.com">Literate Program</a>.
+   </ul>
+  </div>
+ </body>
+</html>

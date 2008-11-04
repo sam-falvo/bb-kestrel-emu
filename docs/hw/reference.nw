@@ -1,0 +1,1163 @@
+\title{Kestrel 2 Baseline Hardware Reference Manual}
+\author{Samuel A. Falvo II}
+\maketitle
+
+\tableofcontents
+
+\section{Introduction to Kestrel 2 Baseline}
+
+All of my life, I have enjoyed the home computer as a vehicle of
+exploration and education.  With hardware that was quite simple to
+control and configure, with system software that usually was equally
+simple, it encouraged an open participation from the programmer to take
+part in defining the boundaries of what the computer could accomplish.
+
+Now-a-days, home computing is a \emph{big business}, and therefore it is
+not in the best interest of commercial vendors to provide openness to
+their products.  To do so would allow competitors to learn trade secrets,
+or to identify bugs that can be exploited in advertising, or worse, when
+connected to the network.  Thus, secrecy is the rule of the day.
+
+I have grown increasingly frustrated with the closed and proprietary
+hardware that nobody seems to know how to program for.  Therefore, I
+decided that I wanted to build my own computer.  Heck, it didn't need to
+be the best possible machine out there.  The 65816 was used because of
+its dirt-simple bus interface, not because of its instruction set.
+Additionally, the FPGA board that I decided to use for the first
+generation Kestrel 2s were decided upon because of convenience, rather
+than puritanical correctness.  What is important is that all hardware
+resources be openly documented and easily available.  This makes the
+Kestrel 2 a hacker's paradise.
+
+Before investing in hardware, however, I decided I wanted to see what
+features I really wanted.  It's all too easy to dream up pie-in-the-sky
+feature lists to stuff into the Xess's relatively cramped FPGA.  Things
+like having 64 sprites on the screen in millions of colors, or supporting
+Cray-style vector coprocessors, are all doable with FPGAs, but they
+consume resources.  And since I'm only going to be able to budget a
+single FPGA in the initial design, I will need to choose what goes into
+it wisely.
+
+For this reason, I decided to build a Kestrel 2 \emph{emulator} which is
+designed with R\&D in mind.  It needs to support a bare minimum of
+functionality:
+
+* It must have a means of displaying stuff to the screen graphically.
+  The MGIA "chip" was designed for this purpose.  It's job is to display
+  a 640x480 monochrome image onto a VGA display device.
+
+* It must have a means of accepting keyboard input.  The KIMO chip is
+  designed for this purpose; its job is to interface a PS/2 keyboard and
+  mouse.
+
+* It must have a means of storing data to, and retrieving data from, some
+  mass-storage device.  For now, this device is virtualized by the
+  emulator so as to use the native host filesystem interface.
+
+With these features, I can write programs, save and load data, and view
+the results.  It's not going to be pretty -- a monochrome only display is
+not something I plan for the final version of the Kestrel.  Likewise,
+mass media will be to MMC cards, which frankly, I don't know how to use
+yet (at the time of my writing this article).  But, it will be sufficient
+for me to write test code for different hardware concepts, without having
+to waste time and energy wondering of I mis-wired something, or my
+Verilog code is buggy, or if the SDRAM timing parameters are wrong, etc.
+It's all about babysteps!
+
+However, even virtualized, unfinished hardware resources need to be
+documented just like they were real hardware resources.  This
+documentation will help record my progress in evolving the Kestrel 2
+specifications, as well as enabling third parties to write software for
+it before actual hardware is finished.  It also helps me evaluate the
+different choices I have for various features.
+
+For example, the MGIA's CRT controller registers are likely to become
+real hardware.  As I gained experience with it in the emulated
+environment, I came to really like their simplicity.  The display engine
+is a bit more sophisticated, but not much more so.  It provides a black
+and white display only, and is loosely based on the first six registers
+of the VIC-I chip from Commodore.  However, being only monochrome, it
+does not fulfill my desired feature of supporting color.  Additionally,
+it does not support the concept of the sprite, thus making implementing
+text cursors and mouse pointers somewhat more difficult for the Kestrel;
+I, therefore, would like to explore and evaluate a number of alternative
+video designs for ease of programming, performance, resource consumption,
+and overall system implementation complexity.
+
+Due to the fact that the Kestrel 2 Baseline's target will always be
+moving, it is strongly urged that only system-level software or well
+isolated device drivers be allowed to touch the hardware documented
+herein.  This is a good idea to follow anyway, since it allows the
+computer's hardware to evolve without breaking application software.
+However, applications may access hardware registers if required, provided
+that it is fully understood that the software may break in future
+hardware (emulated or otherwise) iterations.
+
+I hope you find the documentation in this booklet educational.
+
+\section{Monochrome Graphics Interface Adapter}
+
+The MGIA, or Monochrome Graphics Interface Adapter, is the heart of the
+display system.  It generates its own memory fetches to automatically
+refresh the video display as required.  It supports a 640x480 bitmapped
+screen, displaying pixels that are either black or white.
+
+The MGIA's register set is broken into two major parts: the CRTC (CRT
+Controller), and the Display Engine.
+
+\subsection {CRTC Registers}
+
+There are four CRTC registers in the MGIA.  These registers are used to
+control the timing and polarity of the horizontal and vertical sync
+pulses.  The CRTC is also responsible for interrupting the host computer
+at various times during the display refresh using a \emph{raster
+comparison} function.
+
+\subsubsection{CCHZTL}
+
+<<CCHZTL>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|a|a|a|a|a|a|a|a|a|a|  CCHZTL   $FF0000
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register contains the total number of pixels, starting from the
+rising edge of the horizontal sync pulse to the next rising edge.  A
+640x480 display with a 60Hz refresh rate will need to set this register
+to 800.
+
+\subsubsection{CCVRTL}
+
+<<CCVRTL>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|b|b|b|b|b|b|b|b|b|b|  CCVRTL   $FF0002
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register contains the total number of scanlines, starting from the
+rising edge of the vertical sync pulse to the next rising edge.  A
+640x480 display with a 60Hz refresh rate will need to set this register
+to 525.
+
+\subsubsection{CCSYWD}
+
+<<CCSYWD>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |c|c|c|c|c|c|c|c|d|d|d|d|d|d|d|d|  CCSYWD   $FF0004
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register has two 8-bit subfields.  The 'c' bits specify the
+\emph{vertical sync pulse width}, while the 'd' bits specify the
+\emph{horizontal sync pulse width}.  These widths are specified in raster
+lines and in pixels, respectively.
+
+For a 640x480, 60Hz display, the 'c' bits should be 2 and the 'd' bits
+should be set to 95.  Thus, the total register setting, expressed as a
+single word, should be \$025F.
+
+\subsubsection{CCVRLI}
+
+<<CCVRLI>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|e|e|e|e|e|e|e|e|e|e|  CCVRLI   $FF0006
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+Upon reading this register, the value returned is the \emph{currently
+rendering scanline} on the display.  As the display refresh progresses,
+this register's value will increment correspondingly.  The value returned
+will be between 0 and 524, inclusive.
+
+When \emph{writing} to this register, however, you load the MGIA's raster
+compare register.  When the currently displayed scanline matches the
+raster compare register, an interrupt is generated through the IRQC chip
+(discussed later in this booklet).
+
+Note that there is no facility to disable raster compare interrupts
+within the MGIA chip itself.  However, the effect can be simulated by
+loading the raster compare register with any value greater than the value
+in the CCVRTL register (hence, for 640x480 60Hz VGA displays, any value
+greater than 526 would effectively prohibit raster compare interrupts).
+
+\subsection{Display Engine}
+
+The display engine is keyed off of several control signals generated
+internally by the CRTC, based on the register settings given.  However,
+it contains a few signals of its own to determine where the displayed
+image ought to be on the screen.
+
+\subsubsection{VIHZST and VIHZEN}
+
+<<VIHZST>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|f|f|f|f|f|f|f|f|f|f|  VIHZST   $FF0008
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+<<VIHZEN>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|g|g|g|g|g|g|g|g|g|g|  VIHZEN   $FF000A
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+These two registers determine the pixel coordinates of the left edge of
+the screen and the right edge.  The difference between them determines
+how many pixels per scanline are displayed.  For example, assuming a
+640x480 60Hz VGA display, VIHZST will typically be set to 140, and VIHZEN
+to 780.
+
+\subsubsection{VIVRST and VIVREN}
+
+<<VIVRST>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|h|h|h|h|h|h|h|h|h|h|  VIVRST   $FF000C
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+<<VIVREN>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|i|i|i|i|i|i|i|i|i|i|  VIVREN   $FF000E
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+These two registers determine the pixel coordinates of the top edge of
+the screen and the bottom edge.  The difference between them determines
+how many scanlines are displayed.  For example, assuming a
+640x480 60Hz VGA display, VIVRST will typically be set to 34, and VIVREN
+to 514.
+
+\subsubsection{VIDAPT}
+
+<<VIDAPT>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |j|j|j|j|j|j|j|j|j|j|j|j|j|j|j|j|  VIDAPTL  $FF0010
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|0|0|j|j|j|j|j|j|j|j|  VIDAPTH  $FF0012
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register is a cursor; it points to the next byte in memory to be
+fetched for use as video data.  After each byte is fetched, it increments
+by one.
+
+Note that after all the bytes of a video frame have been fetched and
+displayed, this register \emph{does not} automatically reset itself to
+the beginning of the frame data.  Therefore, the host processor is
+expected to make use of the raster compare interrupt system to reset this
+register during an interrupt handler.  This uses minimum hardware
+resources and provides for maximum software flexibility.  For example,
+small animated sequences can be implemented by just allowing the video
+data pointer to roll through several frames worth of data before needing
+to be reset.
+
+\subsection{Examples}
+
+\subsubsection{MGIA Initialization}
+
+The following example shows how to initialize the MGIA for a 640x480 60Hz
+VGA screen display, placing the video frame buffer at a location
+determined by a system-accessible variable.
+
+<<Initializing the MGIA>>=
+        ;
+        ; This code initializes the MGIA, and establishes the kernel's
+        ; interrupt handler so that we can reset the video frame buffer
+        ; as required.
+        ;
+
+        .import irqVectorN
+        .import not_mgia_irq
+        .import frameBuffer
+
+.proc mgia_initialize
+        lda #800            ; From HSYNC to HSYNC, there are 800 pixels.
+        sta CCHZTL
+        lda #525            ; From VSYNC to VSYNC, there are 525 lines.
+        sta CCVRTL
+        lda #$025F          ; We need 2 VSYNC line width, and 95 pixel 
+        sta CCSYWD          ; HSYNC width.
+
+        lda #140            ; Display's left edge starts at pixel 140,
+        sta VIHZST          ; which includes HSYNC and left border overhead.
+        lda #780            ; Display's right edge stops at pixel 780,
+        sta VIHZEN          ; giving a 640 pixel display on the screen.
+        lda #34             ; Bitmap line 0 starts on screen line 32
+        sta VIVRST
+        lda #514            ; Last line is on 513, so we end the display
+        sta VIVREN          ; on line 514.
+        inc                 ; We'll take our raster interrupt on line 515.
+        sta CCVRLI
+
+        ;
+        ; You will notice that we have not set the MGIA's VIDAPT
+        ; register.  Since this register is going to be reset automatically
+        ; by the IRQ handler every raster interrupt, we decided to skip the
+        ; step here.  1/60th of a second of video garbage isn't likely
+        ; going to be noticable anyway, since most display devices (even
+        ; LCDs) take longer than 1/60th of a second to provide a stable
+        ; display.
+        ;
+
+        lda #mgia_irq_handler
+        sta irqVectorN
+        lda IQPN            ; Clear any pending raster compare interrupts
+        and #$FFFE
+        sta IQPN
+        lda IQEA            ; Enable the raster IRQ at IRQC level
+        ora #$0001
+        sta IQEA
+        cli                 ; Enable the CPU to take IRQs as well.
+        rts
+.endproc
+
+.proc mgia_irq_handler
+        pha
+        AX16
+
+        lda IQPN            ; Double-check to make sure the MGIA
+        lsr                 ; generated the interrupt.  Escape out
+        bcc not_mgia_irq    ; if not.
+
+        lda frameBuffer     ; Reset the video data pointer
+        sta VIDAPTL
+        lda frameBuffer+2
+        sta VIDAPTL
+        bra not_mgia_irq
+.endproc
+@
+
+\subsubsection{Drawing a Horizontal Line}
+
+The bitmap information used by the MGIA are stored linearly; this makes
+drawing horizontal lines quite easy.
+
+<<Drawing a Horizontal Line>>=
+        .importz frameBuffer, left, top, right
+
+.proc mgia_compute_dest
+        ;
+        ; Compute the byte address of the bitmap
+        ; pointer given the (left,top) coordinates.
+        ;
+        ; dest = frameBuffer + (left / 16)
+        ;
+
+        clc
+        lda left
+        lsr
+        lsr
+        lsr
+        lsr
+        adc frameBuffer
+        sta dest
+        bcc doY
+        inc dest+2
+
+        ;
+        ; dest = dest + (top*80)
+        ;
+
+doY:    lda top
+        asr
+        asr
+        asr
+        asr
+        sta tmp
+        asr
+        asr
+        adc tmp
+        adc frameBuffer
+        sta frameBuffer
+        bcc done
+        inc frameBuffer+2
+done:   rts
+.endproc
+
+.proc mgia_hline
+        ;
+        ; Call with:
+        ; left := left pixel coordinate of the line
+        ; top := the vertical pixel coordinate
+        ; right := right pixel coordinate of the line
+        ;
+        ; First, we need to know the width of the rectangle in words.
+        ; This allows us to manipulate the bitmap in terms of words more
+        ; easily.
+        ;
+
+        lda right
+        sec
+        sbc left
+        adc #14             ; A = A+15 because of carry flag set!
+        lsr                 ; A=((A+15)/16) to determine word width
+        lsr
+        lsr
+        lsr
+        sta width           ; in words
+        beq done            ; but if there's nothing to do, then exit
+
+        ;
+        ; The edges of the line may not necessarily align
+        ; conveniently on a word boundary, however.  Therefore,
+        ; to allow word-aligned manipulation of the bitmap data,
+        ; we need to mask off the left and right-hand sides using
+        ; masks.
+        ;
+
+        lda left
+        and #$000F
+        asl
+        tax
+        lda masks_fw,x
+        sta mask_fw
+
+        lda right
+        and #$000F
+        asl
+        tax
+        lda masks_lw,x
+        sta mask_lw
+
+        jsr mgia_compute_dest
+        ldy #0
+
+        ;
+        ; If the width is only 1 word wide, then we need to coalesce
+        ; the first- and last-word masks into a single write.
+        ;
+
+        ldx width
+        dex
+        beq width1
+
+        ;
+        ; Otherwise, we need to first draw the left edge...
+        ;
+
+        lda mask_fw
+        ora [dest],y
+        sta [dest],y
+        iny
+        iny
+
+        ;
+        ; Then, we need to draw the interior.  Remember that
+        ; we draw 16 bits at a time inside this loop, and that
+        ; the first column is already done.  This is why we pre-
+        ; decrement the width counter.
+        ;
+        ; Note: if the width happens to be exactly 2 words wide,
+        ; then at this point, X is currently 1.  After the
+        ; predecrement, X will be zero, thus skipping the code and
+        ; going directly to the code handling the right-hand side.
+        ;
+
+        lda #$FFFF
+inter:  dex
+        beq right
+        sta [dest],y
+        iny
+        iny
+        bra inter
+
+width1: lda mask_fw
+right:  and mask_lw
+        ora [dest],y
+        sta [dest],y
+
+done:   plx
+        rts
+.endproc
+
+        .zeropage
+width:  .res    2
+
+        .data
+masks_fw:
+        .word $FFFF, $7FFF, $3FFF, $1FFF
+        .word $0FFF, $07FF, $03FF, $01FF
+        .word $00FF, $007F, $003F, $001F
+        .word $000F, $0007, $0003, $0001
+
+masks_lw:
+        .word $8000, $C000, $E000, $F000
+        .word $F800, $FC00, $FE00, $FF00
+        .word $FF80, $FFC0, $FFE0, $FFF0
+        .word $FFF8, $FFFC, $FFFE, $FFFF
+@
+
+
+\subsubsection{Drawing a Solid Box}
+
+We can now use the horizontal line routine to be able to draw a solid
+rectangle of '1' pixels.
+
+<<Drawing a White Rectangle on the Screen>>=
+        .importz frameBuffer, left, top, right, bottom
+
+.proc mgia_white_rectangle
+        ; Call with:
+        ; frameBuffer := pointer to first byte of bitmap content
+        ; left := left pixel coordinate
+        ; top := top pixel coordinate
+        ; right := right pixel coordinate
+        ; bottom := bottom pixel coordinate
+
+        ;
+        ; We need the height in pixels, so that we can draw a
+        ; horizonal line that many times.
+        ;
+
+        lda bottom
+        sec
+        sbc top
+        tax                 ; X := height of the rectangle
+
+L1:     jsr mgia_hline
+        inc top
+        dex
+        bne L1
+        rts
+.endproc
+@
+
+\section{Interrupt Controller}
+
+The Kestrel has a number of interrupt sources.  However, the CPU only has
+a single interrupt vector.  Therefore, some additional hardware is
+required to properly identify the source of an interrupt.  Additionally,
+it'd be quite convenient if individual interrupt sources could be turned
+off, while others are left on.  This is the job of the Kestrel's IRQC
+module.
+
+\subsection{IQEA}
+
+<<IQEA>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |             0             |b|a|   $FF0100    IQEA
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register contains a set of bits that individually control one
+interrupt source.  When a bit is \emph{set}, it \emph{enables} an
+interrupt source -- meaning, that interrupt source is capable of
+signalling the microprocessor for attention\footnote{Whether the CPU
+actually responds also depends on whether or not the CPU's own interrupt
+disable flag is clear.}.
+
+Bit 'a' controls the raster compare interrupt.  This bit is, for obvious
+reasons, usually always set.  Otherwise, the microprocessor won't receive
+interrupts from the MGIA chip to reset the video display fetch pointer.
+
+Bit 'b' controls whether the KIMO unit (see next section) can interrupt
+the microprocessor.
+
+\subsection{IQPN}
+
+<<IQPN>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |             0             |d|c|   $FF0101    IQPN
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register serves two purposes.  First, the microprocessor can
+artificially force an interrupt by writing one or more '1' bits to this
+register.  Provided the corresponding bit in IQEA is set, doing so is one
+approach towards generating a software interrupt.
+
+Usually, however, the microprocessor will not set bits in this register.
+Instead, the usual process is to read this register to see what events
+are currently pending.  After processing these events, the associated
+pending bits are \emph{cleared}.
+
+\subsection{Examples}
+
+\subsubsection{Interrupt Dispatching}
+
+The usual approach towards dispatching interrupts can be summarized by
+polling individual bits.  The nice thing with being presented a bitmap of
+pending interrupts is that the software can choose what priority to
+assign each of the devices.  However, in the simplest possible approach,
+one can simply use a shift instruction to send each bit into the CPU's
+carry flag.
+
+<<Interrupt Dispatching>>=
+.proc HandleIRQs
+    AX16            ; Make sure the CPU's registers are wide enough
+    pha             ; Save the interrupted application's state
+    phx
+    phy
+    phd
+    phb
+
+    lda IQPN        ; Poll interrupt sources
+    asl
+    bcs doRaster
+rasterReturn:
+    asl
+    bcs doKeyboard
+keyboardReturn:
+    
+    plb             ; Restore interrupted task's state
+    pld
+    ply
+    plx
+    pla
+    rti             ; Return to interrupted task
+
+doRaster:
+    pha             ; Save IQPN value
+
+    lda frameBuffer ; Reset video fetch pointer
+    sta VIDAPTL
+    lda frameBuffer+2
+    sta VIDAPTH
+    
+    lda IQPN        ; Clear the raster interrupt pending bit
+    and #$FFFE
+    sta IQPN
+
+    pla             ; Prepare for the next interrupt poll
+    bra rasterReturn
+
+doKeyboard:
+    pha             ; Save IQPN value
+
+    lda KBMOST      ; Get the current key up/down status
+    and #$4000      ; in bit 15
+    asl
+    ora KBDA        ; merge in keyboard scan code byte
+    jsr ProcessKeyCode
+
+    lda IQPN        ; clear keyboard interrupt pending bit
+    and #$FFFD
+    sta IQPN
+
+    pla             ; Prepare for the next interrupt poll
+    bra keyboardReturn
+.endproc
+@
+
+\subsubsection{Enabling and Disabling Interrupts}
+
+To enable an interrupt, one simply sets the appropriate IQEA bits:
+
+<<Enabling Interrupts>>=
+.proc EnableIRQs
+    lda IQEA
+    ora #IQKIMO | IQVRLI
+    sta IQEA
+    rts
+.endproc
+@
+
+Disabling them involves the inverse operation of clearing bits:
+
+<<Disabling Only Keyboard Interrupt>>=
+.proc DisableKeyboardIRQ
+    lda IQEA
+    and #~IQKIMO
+    sta IQEA
+    rts
+.endproc
+@
+
+\section{Keyboard and Mouse}
+
+The KIMO (Keyboard Input and MOuse) unit is responsible for providing the
+interface to the keyboard and mouse.  However, there are a few caveats
+when accessing the KIMO registers directly.
+
+First, the emulated Kestrel 2 runs with the SDL library to provide its
+visual output as well as its keyboard and mouse input.  However, the
+"hardware" scancodes returned by SDL for keyboard events may not
+necessarily correspond to live PS/2 hardware.
+
+Second, the KIMO unit detailed here is to be considered alpha quality
+-- while it works for the emulated environment, it may not work as
+described here in live hardware.
+
+These two problems are both addressed with a ROM upgrade.  Since these
+problems are closely enough related that a ROM upgrade is necessary for
+changing the keyboard interface, it is considered acceptable to continue
+the documentation for the emulated hardware environment herein.  When
+live hardware becomes available, this section will be updated
+accordingly.
+
+\subsection{KBDA}
+
+<<KBDA>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |       0       |a|a|a|a|a|a|a|a|   $FF0200     KBDA
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+If the \emph{b} bit is set in the KBMOST register, then the contents of
+this register are considered new data.  The \emph{a} bits contain the
+hardware scancode delivered from the keyboard.  This document \emph{does
+not} specify the set of hardware codes used by the keyboard.  For PS/2
+keyboards, the scancodes will be whatever comes from the PS/2 keyboard.
+In the emulated environment, it'll be SDL-generated scancodes.
+
+Note that reading this register will clear the \emph{b} bit.  However, it
+\emph{will not} clear the keyboard interrupt pending bit.
+
+\subsection{KBMOST}
+
+<<KBMOST>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |b|c|             0             |   $FF0206     KBMOST
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+The KIMO interrupt pending flag (see section 2) and the \emph{b} bit will
+be set if new keyboard data has been received.  Reading from the KBDA
+register will clear this bit (it's no longer new data).
+
+The \emph{c} bit is used to distinguish between keyboard press from
+keyboard release events.  This flag is currently only valid with the SDL
+implementation of KIMO.  It remains to be seen if this flag will remain
+valid for live PS/2 hardware as well.
+
+\subsection{Examples}
+
+This example combines a fair amount of knowledge together, showing how
+the keyboard can be used to control an on-screen, blinking cursor.
+
+<<Keyboard Control of Cursor>>=
+    .p816
+    .include "kestrel/cpu.inc"
+    .include "kestrel/hw2.inc"
+
+    .zeropage
+
+cursorStatus: .res 2
+
+    .rodata
+
+msg1:           .byte   "Press the cursor up, down, left, or right keys"
+msg1len = *-msg1
+msg2:           .byte   "to control the cursor location."
+msg2len = *-msg2
+
+diagMsg:        .byte   "Keyboard scancode: $0000"
+diagLen = *-diagMsg
+
+    .code
+    .export     __E_RESET
+    .importzp   T0, I0, I1
+
+    .importzp   frameBuffer
+    .importzp   leftEdge, topEdge
+    .importzp   cursorLeft, cursorTop
+    .importzp   cursorTimer, cursorTimerControl
+    .importzp   cursorEventBits
+    .importzp   eventsMask
+    .importzp   keyboardCode, keyboardEventBits
+
+    .import     DisplayInitialize
+    .import     DisplayBlack, DisplayWhite
+    .import     DisplayXorText, DisplayXorTextDouble
+    .import     DisplayUseSystemFont
+    .import     DisplayXorCursor
+
+    .import     EventsInitialize, EventsWait
+
+    .import     KeyboardInitialize
+
+    .import     IrqInitialize
+    .import     font
+
+;****** __E_RESET *********************************************
+;
+; FUNCTION
+;   Cold-boot handler.  This, quite literally, is *the* first
+;   thing the 65816 ever executes.  This function DOES NOT
+;   ever return.
+;
+; INPUTS
+;
+; MODIFIES
+;   everything.
+;
+; SEE ALSO
+;
+;**************************************************************
+
+.proc __E_RESET
+    M65816
+    AX16
+
+    ;
+    ; Configure CPU stack and direct page areas
+    ;
+
+    lda #$0000
+    tcd
+    lda #$01FF
+    tcs
+
+    ;
+    ; Initialize all the major subsystems in ROM
+    ;
+
+    jsl DisplayInitialize
+    jsl EventsInitialize
+    jsl KeyboardInitialize
+    jsl IrqInitialize       ; this should always be the last thing to initialize
+
+    ;
+    ; Clear the screen, and print the user instructions.
+    ;
+
+    jsl DisplayBlack
+
+    lda #msg1
+    sta I0
+    stz I0+2
+    lda #msg1len
+    sta I1
+    stz leftEdge
+    stz topEdge
+    jsl DisplayUseSystemFont
+    jsl DisplayXorTextDouble
+
+    clc
+    lda topEdge
+    adc #16
+    sta topEdge
+    lda #msg2
+    sta I0
+    lda #msg2len
+    sta I1
+    jsl DisplayUseSystemFont
+    jsl DisplayXorTextDouble
+
+    ;
+    ; Configure the video soft-timer for cursor blink
+    ;
+
+    lda #8                          ; Every 8 video frames, signal us
+    sta cursorTimerControl
+    sta cursorTimer
+
+    ;
+    ; Locate the cursor at (0,0) by default.
+    ;
+
+    stz cursorLeft
+    stz cursorTop
+    stz cursorStatus
+
+    ;
+    ; Configure ROM kernel to alert us for timer and keyboard events only.
+    ;
+
+    lda #1                      ; assign cursor timer to signal #0
+    sta cursorEventBits
+
+    asl                         ; assign keyboard signal #1
+    sta keyboardEventBits
+
+    ora cursorEventBits         ; The union of the two is what we're
+    sta eventsMask              ; interested in.
+
+    ;
+    ; Now we enter our event loop.
+    ;
+
+eventLoop:
+    jsl EventsWait
+
+    ;
+    ; If event occured, it's almost certainly the video
+    ; timer.
+    ;
+
+    lsr
+    bcs doCursorBlink
+
+    ;
+    ; However, it just might also be the keyboard too!
+    ;
+
+blinkReturn:
+    lsr
+    bcs doKeyboard
+
+keyboardReturn:
+    jmp eventLoop
+
+doCursorBlink:
+    pha
+
+    ;
+    ; Alter the video bitmap
+    ;
+
+    jsl DisplayXorCursor
+
+    ;
+    ; Now change our internal flag to match the visual state
+    ;
+
+    lda cursorStatus
+    eor #$FFFF
+    sta cursorStatus
+
+    ;
+    ; We're done here; let's check for the next event source now
+    ;
+
+    pla
+    bra blinkReturn
+
+doKeyboard:
+    pha
+    jsr CursorOff       ; Turn the cursor off while we're playing
+
+    ;
+    ; Technically, the ROM will put the completed scancode in
+    ; the keyboardCode location for us before signalling us.  But
+    ; this is how it does it:
+    ;
+
+    lda KBMOST          ; Grab bit 14 of the status register
+    and #$4000          ; since that's our key up/down flag
+    asl
+    ora KBDA            ; Merge in the scancode
+    sta keyboardCode    ; And we save the result for processing
+
+    ;
+    ; Dispatch on the selected key press.
+    ;
+
+    cmp #$62            ; SDL scancode for cursor up
+    beq goUp
+
+    cmp #$64            ; for cursor left
+    beq goLeft
+
+    cmp #$66            ; for cursor right
+    beq goRight
+
+    cmp #$68            ; for cursor down
+    beq goDown
+
+keyReturn:
+    jsr CursorOn        ; Turn cursor back on
+    pla
+    bra keyboardReturn
+
+    ;
+    ; These routines adjust the various cursor locations
+    ; making sure not to exceed the visible screen bounds
+    ;
+
+goUp:
+    lda cursorTop
+    beq keyReturn
+    dec cursorTop
+    bra keyReturn
+
+goDown:
+    lda cursorTop
+    cmp #471
+    bcs keyReturn
+    clc
+    adc #8
+    sta cursorTop
+    bra keyReturn
+
+goLeft:
+    lda cursorLeft
+    beq keyReturn
+    dec cursorLeft
+    bra keyReturn
+
+goRight:
+    lda cursorLeft
+    cmp #79
+    bcs keyReturn
+    inc
+    sta cursorLeft
+    bra keyReturn
+
+    ;
+    ; These routines are used to properly hide and show the
+    ; text cursor to prevent visual trash from accumulating on
+    ; the screen.
+    ;
+
+CursorOff:
+    lda cursorStatus
+    beq alreadyOff
+    jsl DisplayXorCursor
+    stz cursorStatus
+alreadyOff:
+    rts
+
+CursorOn:
+    lda cursorStatus
+    bne done
+    jsl DisplayXorCursor
+    lda #$FFFF
+    sta cursorStatus
+    rts
+.endproc
+
+@
+
+\section{Timers}
+
+Timers occupy I/O space starting at \$FF0300.  They are as follows:
+
+\subsection{TMSB}
+
+<<TMSB>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|s|s|s|s|s|s|s|s|s|s|  TMSB     $FF0300
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This timer is a 10-bit down-counter that automatically reloads upon
+reaching zero.  It provides the baud rate generator for the SerBus
+expansion system.
+
+If \$0000 is loaded into this register, the SerBus operates at a maximum
+rate of 12.6Mbps (bitrate equal to the CPU's clock frequency).  Loading
+\$0001 will result in a SerBus operation at 6.3Mbps, etc.  The formula to
+compute the actual bit rate is as follows:
+
+\[
+\mbox{Data Rate }=\frac{25.2 \mbox{ Mbps}}{2 \cdot (1+s)}
+\]
+
+where $s$ is the value in the [[TMSB]] counter.
+
+\section{SerBus}
+
+The SerBus is a serial expansion system for the Kestrel series of
+computers.  It is simple enough of a bus to be bit-banged by the CPU, but
+this seriously impacts the performance for those devices capable of
+delivering bulk amounts of information, such as storage media cards.  For
+this reason, the Kestrel-2's chipset includes a hardware implementation
+of SerBus.
+
+SerBus is itself built on top of the SPI bus specification.
+
+\subsection{SBDATX}
+
+<<SBDATX>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |0|0|0|0|0|0|0|0|t|t|t|t|t|t|t|t|  SBDATX   $FF0400
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+To transmit data to the currently selected device, if any, write a byte
+to this register.  The data rate at which it is sent is determined by the
+[[TMSB]] register.  See the previous section for more details on
+[[TMSB]].
+
+Note that the upper 8-bits of this register are ignored, allowing
+convenient use from either 8- or 16-bit accumulator widths.
+
+This register is \emph{write-only.}  Attempting to read from this register
+will yield unpredictable results, and may trigger another transfer
+inadvertently.
+
+\subsection{SBDARX}
+
+<<SBDARX>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |R|R|R|R|R|R|R|R|r|r|r|r|r|r|r|r|  SBDARX   $FF0402
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register holds a byte of data that was previously received on the
+SerBus.  To facilitate easy use in 8- or 16-bit accumulator modes, this
+register mirrors bits 7-0 into bits 15-8.
+
+Data can only be received while transmitting data (due to SerBus' SPI
+foundations), so this register's contents become valid only \emph{after} a
+transfer has been completed.
+
+This register is \emph{read-only.}  Attempting to write to this register
+will produce no results.
+
+\subsection{SBDS}
+
+<<SBDS>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |c|p|0|0|0|0|0|0|0|0|0|0|0|r|r|r|  SBDS     $FF0404
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This register is used to both select the current device to communicate
+with on the bus, but also to control the SPI bus clock polarity and
+phase.
+
+NOTE: c and p bits are IGNORED (but their contents preserved) in the k2
+emulator!!  This will NOT be the case in real hardware.
+
+The rrr bits select the device, if any.  Device 0 doesn't select anything
+at all -- it is used to "park the bus" when no data transfer is currently
+in progress.  Transfers to device 0 still take the same amount of time as
+any other transfer; however, the data is ignored on reception, and will
+always transmit 0 bits.  Hence, while device 0 is selected, data sent to
+[[SBDATX]] is ignored, while [[SBDARX]] will be set to zero upon
+completion of the transfer.
+
+The semantics of devices 1 through 7 are not specified in
+this document.
+
+This register is read/write.
+
+\subsection{SBST}
+
+<<SBST>>=
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |d|0|0|0|0|0|0|0|0|0|0|0|0|x|x|x|  SBST     $FF0404
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@
+
+This is the status register for the SerBus hardware interface.
+
+The $x$ bits are officially undefined.  In K2, they are held at zero.  In
+hardware, I expect these bits to report the lower 3 bits of the 4-bit
+"current bit" counter used to implement the shift register.  The fourth
+bit is $d$.
+
+The $d$ bit is the \emph{done} bit.  Writing any value to the [[SBDATX]]
+register will clear this bit.  After 8 data bits have been shifted to the
+device, this bit is changed to 1.
+
+In the absence of interrupts, or if interrupt overhead is too much, a
+chunk of data may be transmitted to the currently-selected device with
+code similar to the following:
+
+<<Writing a buffer to a SerBus device>>=
+.extern SerBus_BufferStreamOut
+.proc SerBus_BufferStreamOut
+    php
+    .ax8                    ; Fastest when operating with 8-bit data
+
+    ldy #$00
+again:
+    lda SBST
+    bpl again               ; Wait for the previous transfer to finish
+
+    lda [output_buffer],y
+    sta SBDATX
+    iny
+    cpy #buffer_length
+    bcc again
+
+    plp                     ; restore previous register sizes
+    rts
+.endproc
+@
+
+This register is read-only.
+

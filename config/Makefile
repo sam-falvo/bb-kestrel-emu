@@ -1,0 +1,28 @@
+CHK65816		:= check-65816
+CHK65816BIN		:= $D/$(CHK65816)
+CHK65816SRC		:= $D/$(CHK65816).c
+CHK65816OBJ		:= $D/$(CHK65816).o
+
+CCFLAGS			+= `sdl-config --cflags`
+LD_LIBS			+= `sdl-config --libs` -l65816
+
+CONFIGURE		:= $D/configure
+CLEAN			:= $D/clean
+
+$(CHK65816BIN): $(CHK65816OBJ)
+	$(LD) $(LDFLAGS) -o $@ $< $(LD_LIBS)
+
+.PHONY: $(CONFIGURE)
+
+$(CONFIGURE): $(CHK65816BIN)
+	$(CHK65816BIN)
+
+ALL_CONFIG		+= $(CONFIGURE)
+
+.PHONY: $(CLEAN)
+
+$(CLEAN):
+	$(DELETE) $(CHK65816BIN) $(CHK65816OBJ)
+
+ALL_CLEAN 		+= $(CLEAN)
+

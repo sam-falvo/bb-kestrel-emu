@@ -1,0 +1,223 @@
+<html>
+ <head>
+  <title>
+   Design Doc: Serial Bus Protocol
+  </title>
+  <link href="/css/core.css" rel="stylesheet" type="text/css" />
+ </head>
+ <body>
+  <a href="/navigation">Navigate This Site...</a>
+  <div id="Content">
+   <h1>
+    Design Doc: Serial Bus Protocol
+   </h1>
+   <h2>
+    Background
+   </h2>
+   <p>
+    The 65xx bus, being single-cycle (meaning, one CPU cycle maps to one
+    memory cycle), makes creating expansion backplanes for it somewhat
+    difficult due to the timing requirements involved.  As if that
+    weren't enough, the relative expense of creating peripherals is
+    worsened by expensive connector technologies.  The most prevalent
+    method is to use PCI slots, which can cost upwards of $4 per slot if
+    you know where to get them.  This is also true for 96-pin Eurocard
+    connectors too.  For an interconnect, that's quite hefty in terms of
+    price.
+   </p>
+   <p>
+    From a mechanical point of view, there is the minor issue of deciding
+    the final form-factor of the product as well.  In particular, do you
+    want 2 slots?  4 slots?  8 slots?  Maybe 6?  How far apart do we
+    space them?  Are they buffered or unbuffered?  Do we expose the raw
+    CPU bus, or make a CPU independent bus?  What if I don't want a card
+    cage at all?  What if I do, but want it to be a half-rack unit
+    instead of a full-rack unit?  If I design it for a rack unit, how
+    many Us do I make it?  I think you get the idea.
+   </p>
+   <p>
+    These issues all add to the expense of solving the basic problem:
+    getting data from point A, to point B.  None of these issues address
+    the software side of things either!
+   </p>
+   <p>
+    The operating system would need to be aware of how to probe the
+    attached hardware for device identification, so that it may
+    intelligently seek out the suitable device drivers.  Or, maybe the
+    card will place its own drivers in ROM.  Or, maybe the OS will load
+    the drivers into local RAM from a ROM-disk provided by the card.  Do
+    I have split configuration and I/O spaces?  Do I merge configuration,
+    I/O, and drivers into a single address space?  Do I use parallel ROMs
+    or serial ROMs for storing driver/device ID information?  Etc.
+   </p>
+   <p>
+    The hardware is greatly simplified by employing a basic serial
+    interface, to be documented elsewhere.  However, a side effect of
+    using a serial interface is that peripherals <i>must</i> employ some
+    element of intelligence in order to be useful.  It is not possible,
+    with the resources available to the Kestrel, for the hardware to
+    perform a write to an I/O location, and to have that write
+    transmitted over the serial link, to be decoded by a remote DMA
+    engine (indeed, this is precisely how Firewire works, but requires
+    extremely specialized hardware on both sides of the link for this to
+    work).  Therefore, a higher-level protocol must be defined to enable
+    a cheap interconnect to have maximum benefit.
+   </p>
+   <h2>
+    Layer 2 Overview
+   </h2>
+   <h3>
+    Channels Versus Peripherals
+   </h3>
+   <p>
+    A single <i>peripheral</i>, that which the user plugs into the Serbus,
+    will often maintain more than one single item of functionality.  For
+    example, a storage controller that provides an IDE interface can
+    support 2 IDE peripherals (typically harddrives).  A SCSI controller
+    may provide for 7 devices.  Devices need not even expose the same
+    functionality.  A console peripheral might support a keyboard and a
+    mouse, for example.
+   </p>
+   <p>
+    Whether the host software communicates with these functionalities
+    through a single command-based interface or through multiple separate
+    <i>channels</i> of communications with the peripheral depends
+    entirely on the implementation of the peripheral.  Channel 0 is used
+    for discovery of the kind of device, and therefore, its supported
+    protocol of communication as well.  If no other channels are
+    supported, then all primary device activity must also occur over
+    channel 0.
+   </p>
+   <p>
+    At this high a conceptual level, you can think of device channel 0 as
+    a directory service, of sorts, which leads software to other
+    supported device channels as appropriate.  Note that this protocol
+    specification <i>does</i> permit channels to be created on-demand if
+    required.  For example, mass storage devices with integrated
+    filesystems may map each open file to a separate, dynamically
+    allocated channel.  (ISSUE: Should we use <i>host-allocated</i>
+    channels instead?)
+   </p>
+   <p>
+    It should be noted that nothing in the bus protocol restricts
+    channels to input-only or output-only.  The protocol implicitly
+    assumes that all channels are bidirectional capable.  Whether a
+    channel is unidirectional or not is a peripheral-specific attribute.
+   </p>
+   <h3>
+    Talkers and Listeners
+   </h3>
+   <p>
+    Borrowing some concepts from the GPIB, the Serbus (as with Commodore's
+    own IEC serial bus) defines the concept of <i>listeners</i> and
+    <i>talkers</i>.  A listener is any <i>channel</i> which is currently
+    <i>accepting data from the host system</i>.  The protocol supports
+    having more than one listener active at a time, though it is
+    generally not employed.  Likewise, a <i>talker</i> is any channel
+    which is currently <i>transmitting data to the host system</i>.  Only
+    one talker is permitted per Serbus device.
+   </p>
+   <p>
+    Unlike GPIB and IEC buses, it is <i>not</i> possible for peripherals
+    to address each other directly; the Serbus protocol is strictly
+    master/slave in its architecture.  This stems directly from the
+    nature of the SPI bus, on which Serbus is built.
+   </p>
+   <h2>
+    Layer 2 Commands
+   </h2>
+   <p>
+    When a peripheral's /DEVSEL signal is asserted, the peripheral is to
+    immediately enter <i>attention</i> state, whereby it will listen for
+    traffic management commands on the bus.  These commands include the
+    following:
+   </p>
+   <table>
+    <tr>
+     <th>Command Name</th>
+     <th>Wire Format</th>
+     <th>Description</th>
+    </tr>
+    <tr>
+     <td>ECHO</td>
+     <td>$00 <i>any arbitrary length of data</i></td>
+     <td>Instructs the peripheral to echo the data back on the link.
+         This is primarily intended for use in debugging.  Because Serbus
+         is based on SPI links, arbitrary lengths are supported by just
+         echoing back bytes when they are received.</td>
+    </tr>
+    <tr>
+     <td>TALK</td>
+     <td>$01 <i>channel-id</i></td>
+     <td>Instructs a given channel to transmit any pending data.</td>
+    </tr>
+    <tr>
+     <td>LISTEN</td>
+     <td>$02 <i>number-of-channels channel-id-1 ... optional-data</td>
+     <td>Instructs a given channel(s) to listen to any data
+         forthcoming.  It is possible to send a zero-length frame by
+         simply not including any data.</td>
+    </tr>
+   </table>
+   <h2>
+    Framing
+   </h2>
+   <p>
+    The peripheral's /DEVSEL line delineates framing, thus eliminating the
+    need for both frame delimiter bytes, wire-level encoding, and for
+    GPIB-style UNTALK and UNLISTEN commands.  All of these features are
+    implicit.
+   </p>
+   <h3>
+    Talkers
+   </h3>
+   <p>
+    It is possible for /DEVSEL to be negated while a peripheral is still
+    talking.  This means that some data on a channel may not yet be read.
+    This data will remain queued up until it is either read via another TALK
+    command, or until explicitly flushed with a device-specific command.
+   </p>
+   <p>
+    Let us suppose that we have a simple device that simply echos
+    whatever it receives on channel 1 back onto channel 1.  Assume we
+    dump the two null-terminated strings "HELLO" and "WORLD" to channel
+    1.  Therefore, we've just queued up a total of 12 bytes on channel 1.
+    After executing a TALK 1 command, it will respond first with the
+    length of the data pending on channel 1 (in this case 12), followed
+    by the string of bytes present.
+   </p>
+   <p>
+    But, suppose we read back only 6 data bytes in the first transaction
+    by negating /DEVSEL midway through.  The device will still have 6 bytes
+    queued up (at least).  Therefore, the next TALK 1 command will
+    respond with a length of 6 (at least), followed by the remaining
+    bytes.
+   </p>
+   <p>
+    Through this mechanism, it should be possible to respond to
+    higher-priority, interrupting devices with more rapid response time,
+    without interrupting the integrity of the data being received from
+    other peripherals.
+   </p>
+   <p>
+    If the data currently pending is to be discarded, a separate,
+    device-specific command directed to the appropriate channel (usually,
+    but not necessarily always, 0) is required.
+   </p>
+   <h3>
+    Listeners
+   </h3>
+   <p>
+    It is possible for /DEVSEL to be negated while a peripheral is still
+    listening.  The negation of /DEVSEL is sufficient to terminate a
+    single write operation, which usually doesn't cause any harm in the
+    event that a higher priority peripheral needs to be tended to.
+    However, some devices may expect an integral
+    number of bytes before acting on a command.  If it is desired that
+    this data be discarded and the command cancelled, a separate,
+    device-specific command directed to the appropriate channel (usually,
+    but not necessarily always, 0) is required.
+   </p>
+  </div>
+ </body>
+</html>
