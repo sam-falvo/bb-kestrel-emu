@@ -22,7 +22,7 @@ int
 kimo_initialize( void )
 {
     memset( &kimo, 0, sizeof( IO_KIMO ) );
-    CPUEvent_schedule( &kimoCheckEvent, 126000, &kimo_update );
+    CPUEvent_schedule( &kimoCheckEvent, 400, &kimo_update );
     return 1;
 }
 
@@ -66,14 +66,14 @@ kimo_update( word32 timestamp )
             case SDL_KEYDOWN:
                 kimo.kbda = evt.key.keysym.scancode;
                 kimo.kbmost |= 0xC000;
-                irqc.iqpn |= 0x0002;
+                irqc_kimo();
                 break;
 
             case SDL_KEYUP:
                 kimo.kbda = evt.key.keysym.scancode;
                 kimo.kbmost |= 0x8000;
                 kimo.kbmost &= ~0x4000;
-                irqc.iqpn |= 0x0002;
+                irqc_kimo();
                 break;
 
             case SDL_QUIT:
@@ -83,6 +83,6 @@ kimo_update( word32 timestamp )
         }
     }
 
-    CPUEvent_schedule( &kimoCheckEvent, 126000, &kimo_update );
+    CPUEvent_schedule( &kimoCheckEvent, 400, &kimo_update );
 }
 

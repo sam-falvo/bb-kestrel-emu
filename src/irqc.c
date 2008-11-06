@@ -71,3 +71,10 @@ irqc_raster( void )
     irqc_update( 0 );
 }
 
+void
+irqc_kimo(void)
+{
+    irqc.iqpn |= IQKIMO;
+    irqc_update(0);
+}
+
