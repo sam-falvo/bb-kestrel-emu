@@ -47,5 +47,8 @@ irqc_update( word32 timestamp );
 void
 irqc_raster( void );
 
+void
+irqc_kimo( void );
+
 #endif
 

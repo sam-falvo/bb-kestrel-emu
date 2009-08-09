@@ -10,7 +10,10 @@
 #include <stdlib.h>
 
 #include <lib65816/cpu.h>
+#include <lib65816/cpuevent.h>
+#include "decoder.h"
 #include "ram.h"
+#include "rom.h"
 #include "io.h"
 
 FILE *hardfile;  /* Used in serbus.c */
@@ -18,8 +21,6 @@ FILE *hardfile;  /* Used in serbus.c */
 static int
 k2_initialize( void )
 {
-    int success;
-
     if( !ram_initialize() )     goto no_ram;
     if( !rom_initialize() )     goto no_rom;
     if( !io_initialize() )      goto no_io;
@@ -45,12 +46,6 @@ k2_expunge( void )
     ram_expunge();
 }
 
-    static int
-    peekw( int a )
-    {
-        return (256*ram_read(a+1,0))+ram_read(a,0);
-    }
-
 void
 EMUL_handleWDM( byte opcode, word32 timestamp )
 {
@@ -75,15 +70,15 @@ EMUL_handleWDM( byte opcode, word32 timestamp )
             for( j = 0; j < 64; j++ )
             {
                 if( ( j & 15 ) == 0 ) fprintf( stderr, "\n%04X - ", i );
-                if( i == S.W ) fprintf( stderr, "*%02X", MEM_readMem(i,timestamp) );
-                else           fprintf( stderr, " %02X", MEM_readMem(i,timestamp) );
+                if( i == S.W ) fprintf( stderr, "*%02X", MEM_readMem(i,timestamp,0) );
+                else           fprintf( stderr, " %02X", MEM_readMem(i,timestamp,0) );
                 i+=1;
             }
             fprintf( stderr, "\n" );
             break;
 
         default:
-            fprintf( stderr, "Unknown WDM opcode $%02X at $%06X\n", opcode, PC.A );
+            fprintf( stderr, "Unknown WDM opcode $%02X at $%06lX\n", opcode, PC.A );
             break;
     }
 }

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "ram.h"
 
 static byte *memory = 0;
 
@@ -24,10 +25,9 @@ static byte *memory = 0;
 int
 rom_initialize( void )
 {
-    int i;
     FILE *romfile;
 
-    memory = (char *)( malloc( MEMSIZE ) );
+    memory = (byte *)( malloc( MEMSIZE ) );
     if( memory == 0 ) goto no_memory;
 
     romfile = fopen( "ROMFILE", "rb" );
@@ -62,8 +62,8 @@ rom_read( word32 address, word32 unusedTimestamp )
 }
 
 void
-rom_write( word32 address, byte b )
+rom_write( word32 address, byte b, word32 timestamp )
 {
-    ram_write( address, b );        /* RAM write-through */
+    ram_write( address, b, timestamp );        /* RAM write-through */
 }
 

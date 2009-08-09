@@ -74,8 +74,8 @@ cache_restart( void )
     now = SDL_GetTicks();
     if( ( now - reference ) > 1000 )
     {   
-        fprintf( stderr, "\r  FPS: %d   ", frames );
-        fprintf( stderr, "CPU Performance: %d%%   ", (10*frames)/6);
+        fprintf( stderr, "\r  FPS: %ld   ", frames );
+        fprintf( stderr, "CPU Performance: %ld%%   ", (10*frames)/6);
 
         frames = 0; reference = now;
     }
@@ -94,8 +94,6 @@ cache_expunge( void )
 void
 cache_nextLine( word32 origin )
 {
-    word32 *p, *pe;
-
     line++;
     beam = pixels + (line*screenWidthInPixels + origin);
 }

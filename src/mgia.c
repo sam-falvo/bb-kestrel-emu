@@ -9,6 +9,7 @@
  */
 
 #include <sys/time.h>
+#include <unistd.h>
 
 #include <lib65816/cpuevent.h>
 #include <lib65816/cpu.h>
@@ -130,7 +131,6 @@ mgia_write( word32 address, byte b, word32 timestamp )
 void
 mgia_update( word32 cpuTime )
 {
-    int kindOfPixel;
     byte b;
     static int skip = 0;
     struct timeval tv;
@@ -157,7 +157,7 @@ mgia_update( word32 cpuTime )
 
         if( skip == 0 )
         {
-            b = MEM_readMem( mgia.VIDAPT++, cpuTime );
+            b = MEM_readMem( mgia.VIDAPT++, cpuTime, 0 );
 
             if( b & 0x01 ) beam[7] = WHITE;
             if( b & 0x02 ) beam[6] = WHITE;

@@ -23,9 +23,7 @@ static byte *ram = 0;
 int
 ram_initialize( void )
 {
-    int i;
-
-    ram = (char *)( malloc( MEMSIZE ) );
+    ram = (byte *)( malloc( MEMSIZE ) );
     if( !ram ) goto no_memory;
     return 1;
 
@@ -45,12 +43,6 @@ byte
 ram_read( word32 address, word32 unusedTimestamp )
 {
     return (byte)( ram[ address ] );
-}
-
-static void
-ram_debug( byte b )
-{
-    fprintf( stderr, "!! *$0212=$%02X, PC=$%06lX\n", b, PC.A );
 }
 
 void

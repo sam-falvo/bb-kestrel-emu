@@ -21,7 +21,7 @@ byte
 rom_read( word32 address, word32 unusedTimestamp );
 
 void
-rom_write( word32 address, byte b );
+rom_write( word32 address, byte b, word32 timestamp );
 
 #endif
 

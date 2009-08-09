@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 
+#include <SDL/SDL.h>
+
 #include <lib65816/cpu.h>
 #include "io.h"
 
@@ -94,8 +96,8 @@ io_write( word32 address, byte b, word32 timestamp )
         now = SDL_GetTicks();
         if( ( now - reference ) > 1000 )
         {
-            fprintf( stderr, "\r  FPS: %d   ", frames );
-            fprintf( stderr, "CPU Performance: %d%%   ", (10*frames)/6);
+            fprintf( stderr, "\r  FPS: %ld   ", frames );
+            fprintf( stderr, "CPU Performance: %ld%%   ", (10*frames)/6);
 
             frames = 0; reference = now;
         }

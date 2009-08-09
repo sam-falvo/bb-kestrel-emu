@@ -9,6 +9,7 @@
 
 #include <lib65816/cpu.h>
 
+#include "decoder.h"
 #include "ram.h"
 #include "rom.h"
 #include "io.h"
@@ -67,29 +68,11 @@ MEM_initialize( void )
     wmap[ 0xFF02 ] = kimo_write;
 }
 
-#if 0
-
-byte
-MEM_readMem( word32 address, word32 timestamp )
-{
-    address &= 0x00FFFFFF;
-    return (rmap[address>>8])( address, timestamp );
-}
-
-void
-MEM_writeMem( word32 address, byte b, word32 timestamp )
-{
-    address &= 0x00FFFFFF;
-    (wmap[address>>8])( address, b, timestamp );
-}
-
-#endif
-
 #define IS_IO(a) (((a)&0xFF0000)==0xFF0000)
 #define IS_ROM(a) (((a)&0xFF8000)==0x008000)
 
 byte
-MEM_readMem( word32 address, word32 timestamp )
+MEM_readMem( word32 address, word32 timestamp, word32 ignored )
 {
     address &= 0x00FFFFFF;
 

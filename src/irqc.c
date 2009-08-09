@@ -34,12 +34,13 @@ irqc_expunge( void )
 byte
 irqc_read( word32 address, word32 timestamp )
 {
+    /* default: used instead of case 3: to satisfy compiler warning. */
     switch( address & 0x0003 )
     {
         case  0: return LOBYTE(irqc.iqea);
         case  1: return HIBYTE(irqc.iqea);
         case  2: return LOBYTE(irqc.iqpn);
-        case  3: return HIBYTE(irqc.iqpn);
+        default: return HIBYTE(irqc.iqpn);
     }
 }
 

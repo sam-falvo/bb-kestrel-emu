@@ -11,14 +11,6 @@
 
 #include <lib65816/cpu.h>
 
-/* The Kestrel 2 will use the Xess series of FPGA developer toolkits,
- * which comes standard with 32MB of SDRAM.  However, in the emulator,
- * the CPU can only see the first 16MB, because I have not yet
- * implemented the MMU for the CPU yet.
- */
-
-#define MEMSIZE     (32*1048576L)
-
 int
 ram_initialize( void );
 

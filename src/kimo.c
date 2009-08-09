@@ -44,7 +44,7 @@ kimo_read( word32 address, word32 timestamp )
         case  4: return 0;
         case  5: return 0;
         case  6: return LOBYTE(kimo.kbmost);
-        case  7: return HIBYTE(kimo.kbmost);
+        default: return HIBYTE(kimo.kbmost);
     }
 }
 
